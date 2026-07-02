@@ -21,7 +21,7 @@ jobs:
 
     - name: Build EDK2 and VgaShim
       run: |
-        make -C BaseTools
+        make -C BaseTools BUILD_CFLAGS="-Wno-error"
         . edksetup.sh
         build -a X64 -p MdeModulePkg/MdeModulePkg.dsc -m MdeModulePkg/Application/VgaShim/VgaShim.inf -b RELEASE -t GCC5
 
