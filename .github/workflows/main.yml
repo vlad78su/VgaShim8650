@@ -24,7 +24,7 @@ jobs:
         build -a X64 -p MdeModulePkg/MdeModulePkg.dsc -m MdeModulePkg/Application/VgaShim/VgaShim.inf -b RELEASE -t GCC5
 
     - name: Upload Artifact
-      uses: actions/artifacts/upload-artifact@v4
+      uses: actions/upload-artifact@v4
       with:
         name: VgaShim-EFI
         path: Build/MdeModule/RELEASE_GCC5/X64/VgaShim.efi
