@@ -21,9 +21,7 @@ jobs:
 
     - name: Build EDK2 and VgaShim
       run: |
-        find BaseTools/ -name "Makefile" -exec sed -i 's/-Werror//g' {} +
-        find BaseTools/ -name "Header.makefile" -exec sed -i 's/-Werror//g' {} +
-        if [ -d "Conf" ]; then find Conf/ -name "*.txt" -exec sed -i 's/-Werror//g' {} +; fi
+        grep -rl -- "-Werror" . | xargs sed -i 's/-Werror//g' || true
         make -C BaseTools
         . edksetup.sh
         build -a X64 -p MdeModulePkg/MdeModulePkg.dsc -m MdeModulePkg/Application/VgaShim/VgaShim.inf -b RELEASE -t GCC5
