@@ -17,7 +17,9 @@
 #include "Util.h"
 #include "Filesystem.h"
 #include "Int10hHandler.h"
+#include "BootflagSimple.h"
 #include "Version.h"
+#include "AmdVbios.h"
 
 
 /**
@@ -93,15 +95,9 @@ UefiMain (
 	// Show pretty graphics.
 	//
 	if (!DebugMode) {
-		ShowAnimatedLogo();
-	}
-
-	//
-	// Windows 7 prefers a 1024x768 resolution.
-	//
-	SwitchVideoMode(1024, 768);
-	if (DebugMode) {
-		PrintVideoInfo();
+		if (!ShowAnimatedLogo()) {
+			ShowStaticLogo();
+		}
 	}
 
 	//
@@ -116,11 +112,7 @@ UefiMain (
 	//
 	// Sanity checks.
 	//
-	if (sizeof INT10H_HANDLER > VGA_ROM_SIZE) {
-		PrintError(L"Shim size bigger than allowed (%u > %u), aborting\n", 
-			sizeof INT10H_HANDLER, VGA_ROM_SIZE);
-		goto Exit;
-	}
+
 
 	//
 	// Unlock VGA ROM memory area for writing first.
@@ -135,17 +127,13 @@ UefiMain (
 	// Copy ROM stub in place and fill in the missing information.
 	//
 	SetMem((VOID *)VGA_ROM_ADDRESS, VGA_ROM_SIZE, 0);
-	CopyMem((VOID *)VGA_ROM_ADDRESS, INT10H_HANDLER, sizeof INT10H_HANDLER);
-	Status = ShimVesaInformation(VGA_ROM_ADDRESS, &Int10hHandlerAddress);
-	if (EFI_ERROR(Status)) {
-		PrintError(L"VESA information could not be filled in, aborting\n");
-		goto Exit;
-	} else {
-		// Convert from 32bit physical address to real mode segment address.
-		NewInt10hHandlerEntry.Segment = (UINT16)((UINT32)VGA_ROM_ADDRESS >> 4);
-		NewInt10hHandlerEntry.Offset = (UINT16)(Int10hHandlerAddress - VGA_ROM_ADDRESS);
-		PrintDebug(L"VESA information filled in, Int10h handler address=%x (%04x:%04x)\n", 
-			Int10hHandlerAddress, NewInt10hHandlerEntry.Segment, NewInt10hHandlerEntry.Offset);
+	CopyMem((VOID *)VGA_ROM_ADDRESS, AMD_VBIOS, sizeof AMD_VBIOS);
+
+	NewInt10hHandlerEntry.Segment = (UINT16)((UINT32)VGA_ROM_ADDRESS >> 4); // Получится 0xC000
+	NewInt10hHandlerEntry.Offset  = 0x0003; 
+
+	PrintDebug(L"AMD VBIOS injected successfully. Int10h points to (%04x:%04x)\n", 
+		NewInt10hHandlerEntry.Segment, NewInt10hHandlerEntry.Offset);
 	}
 	
 	//
@@ -467,7 +455,7 @@ EnsureMemoryLock(
 
 			PrintDebug(L"%s %s memory at %x with EfiLegacyRegionProtocol\n", 
 				EFI_ERROR(Status) ? L"Failure" : L"Success",
-				Operation == UNLOCK ? L"unlocking" : L"locking",
+				Operation == UNLOCK ? L"unlocking" : L"locking", 
 				StartAddress);
 		}
 	}
@@ -488,7 +476,7 @@ EnsureMemoryLock(
 
 			PrintDebug(L"%s %s memory at %x with EfiLegacyRegion2Protocol\n", 
 				EFI_ERROR(Status) ? L"Failure" : L"Success",
-				Operation == UNLOCK ? L"unlocking" : L"locking",
+				Operation == UNLOCK ? L"unlocking" : L"locking", 
 				StartAddress);
 		}
 	}
@@ -506,8 +494,8 @@ EnsureMemoryLock(
 		}
 
 		PrintDebug(L"%s %s memory at %x with MTRRs\n", 
-			EFI_ERROR(Status) ? L"Failure" : L"Success",
-			Operation == UNLOCK ? L"unlocking" : L"locking",
+			EFI_ERROR(Status) ? "Failure" : "Success",
+			Operation == UNLOCK ? "unlocking" : "locking", 
 			StartAddress);
 	}
 	
@@ -516,7 +504,7 @@ EnsureMemoryLock(
 	// 
 	if (EFI_ERROR(Status)) {
 		PrintError(L"Unable to find a way to %s memory at %x\n", 
-			Operation == UNLOCK ? L"unlock" : L"lock", StartAddress);
+			Operation == UNLOCK ? "unlock" : "lock", StartAddress);
 	}
 	
 	return Status;
@@ -551,6 +539,40 @@ CanWriteAtAddress(
 	*TestPtr = OldValue;
 	return CanWrite;
 }
+
+
+/**
+  Displays a static built-in Windows flag (last frame in
+  animation shown when starting Windows 7).
+
+  @retval TRUE              Static logo was successfully retrieved
+                            and displayed on screen.
+  @retval FALSE             Either the required resource was not found
+                            or was unable to switch to graphical output.
+  
+**/
+BOOLEAN
+ShowStaticLogo()
+{
+	EFI_STATUS	Status;
+	IMAGE		*WindowsFlag;
+
+	// Sanity checks.
+	Status = BmpFileToImage(BootflagSimple, sizeof BootflagSimple, (VOID **)&WindowsFlag);
+	if (EFI_ERROR(Status)) {
+		return FALSE;
+	}
+	
+	// All fine, let's do some drawing.
+	SwtichToGraphics(FALSE);
+	ClearScreen();
+	DrawImageCentered(WindowsFlag);
+
+	// Cleanup & return.
+	DestroyImage(WindowsFlag);
+	return TRUE;
+}
+
 
 /**
   Displays an animated logo. It has to be stored in a .bmp file
