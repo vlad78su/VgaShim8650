@@ -1,0 +1,30 @@
+name: Build VgaShim
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Install prerequisites
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential uuid-dev iasl git gcc-multilib nasm python3-distutils
+
+    - name: Build EDK2 and VgaShim
+      run: |
+        make -C BaseTools
+        . edksetup.sh
+        build -a X64 -p MdeModulePkg/MdeModulePkg.dsc -m MdeModulePkg/Application/VgaShim/VgaShim.inf -b RELEASE -t GCC5
+
+    - name: Upload Artifact
+      uses: actions/artifacts/upload-artifact@v4
+      with:
+        name: VgaShim-EFI
+        path: Build/MdeModule/RELEASE_GCC5/X64/VgaShim.efi
